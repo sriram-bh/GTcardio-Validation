@@ -1,231 +1,173 @@
-PPG-Based Blood Pressure Estimation
+# PPG-Based Blood Pressure Estimation  
 End-to-End Signal Processing, Feature Engineering, Machine Learning, and Clinical Validation
 
-This repository contains a complete machine-learning pipeline for estimating systolic and diastolic blood pressure (SBP/DBP) from Photoplethysmography (PPG).
-It includes:
+This repository contains a complete machine learning pipeline for estimating systolic and diastolic blood pressure (SBP/DBP) from photoplethysmography (PPG) waveforms. The project integrates physiological signal processing, handcrafted feature extraction, model training using multiple regressors, and clinical validation on a real ambulatory blood pressure monitoring (ABPM) dataset.
 
-Physiological signal processing and cycle segmentation
+---
 
-Handcrafted morphological feature extraction
+## Project Structure
 
-Feature selection via correlation-based pruning
-
-Multi-model ML regression with subject-wise cross-validation
-
-A full suite of clinical validation analyses
-
-A secondary dataset study on ABPM data from Kolkata
-
-This project re-implements and extends the AIME 2020 blood pressure pipeline and adds a complete downstream clinical statistics workflow.
-
-Project Structure
+```
 .
 ├── extract_features_and_predict_bp_from_ppg_eval.ipynb   # Core ML pipeline
-├── KolkataStatsTests.ipynb                               # Clinical validation
-├── Validation Report.pdf                                 # Summary of results
-├── features/                                             # Generated feature CSVs
+├── KolkataStatsTests.ipynb                               # Clinical validation and statistical analysis
+├── Validation Report.pdf                                 # Summary of best results and evaluation
+├── features/                                             # Auto-generated feature CSVs
 ├── results/                                              # Model performance outputs
 └── README.md
+```
 
-Overview
+---
 
-This project implements a signal-processing + ML framework to estimate BP from raw PPG waveforms. The workflow includes:
+## Overview
 
-PPG preprocessing
+This project implements an end-to-end framework for cuff-less blood pressure estimation using PPG. It includes:
 
-High-quality cardiac-cycle detection
+1. Signal preprocessing and cardiac cycle segmentation  
+2. Morphological feature extraction from each cycle  
+3. Aggregation and correlation-based feature pruning  
+4. Training multiple machine learning models  
+5. Subject-wise cross-validation  
+6. Clinical validation using ABPM data from a Kolkata study  
 
-Cycle-level morphological feature extraction
+The pipeline is designed to follow realistic physiological and clinical validation practices.
 
-Aggregated window statistics (mean/variance)
+---
 
-Correlation-based feature pruning
+## 1. Signal Processing Pipeline
 
-Model training and evaluation
+### Cycle Detection
+- Uses `scipy.signal.find_peaks` to identify cycle start points  
+- Computes a template cycle from median cycle length  
+- Evaluates cycle quality using two signal quality indices (SQI):  
+  - Pearson correlation with the template  
+  - Correlation with a resampled version of each cycle  
+- Only cycles with SQI ≥ 0.8 are kept
 
-Clinical-grade validation on ABPM datasets
+### Cycle Cleaning
+- Time-interpolation to align cycle timestamps  
+- Baseline normalization  
+- Outlier trimming based on the 80th percentile threshold
 
-The pipeline is robust, interpretable, and designed to mimic FDA-style physiological validation.
+These steps ensure high-quality and morphologically consistent cardiac cycles for feature extraction.
 
-1. Signal Processing Pipeline
-Cycle Detection
+---
 
-Uses scipy.signal.find_peaks to detect local minima that correspond to cycle starts
+## 2. Morphological Feature Extraction
 
-Builds a template cycle from median cycle length
+For each valid cardiac cycle, the pipeline extracts:
 
-Computes:
+- Systolic peak timestamp  
+- Systolic rise time (T_S)  
+- Diastolic decay time (T_D)  
+- Widths at fractional amplitudes (10%, 25%, 33%, 50%, 66%, 75%)  
+- Systolic-to-diastolic timing ratios  
+- Cycle period (CP)
 
-Pearson correlation between each cycle and the template
+Features are aggregated over each window (e.g., 30 seconds) using:
 
-A resampled correlation score
+- Mean  
+- Variance  
 
-Cycles with SQI < 0.8 are rejected.
+The result is a structured and interpretable feature set representing PPG morphology.
 
-Cycle Cleaning
+---
 
-Performs:
+## 3. Machine Learning Pipeline
 
-Interpolation to aligned timestamps
+### Feature Pruning
+Features with correlation greater than 0.95 are removed.
 
-Baseline normalization
+### Models Implemented
+- ElasticNet Regression  
+- Gradient Boosting Regressor  
+- Random Forest Regressor  
+- LightGBM Regressor  
+- Dummy Regressor (mean baseline)
 
-Outlier trimming based on 80th percentile thresholds
+### Cross-Validation Strategy
+Uses leave-k-subjects-out cross-validation with k ∈ {1, 2, 3}, providing a realistic estimate of generalization across unseen individuals.
 
-Why This Matters
+Performance metrics include:
 
-Clean cycle-level segmentation dramatically improves the interpretability and stability of BP estimation from PPG—a known hard problem due to motion artifacts and morphological variability.
+- MAE (Mean Absolute Error)  
+- RMSE (Root Mean Squared Error)  
+- MAPE (Mean Absolute Percentage Error)  
+- Standard deviations of metrics across folds  
 
-2. Morphological Feature Extraction
+Results are saved in timestamped CSV files under the `results/` directory.
 
-For each valid cardiac cycle, the algorithm computes:
+---
 
-Systolic Peak Timing (T_S)
+## 4. ML Evaluation Results (AIME 2020 EVAL Dataset)
 
-Diastolic duration (T_D)
+For each predicted variable (SBP, DBP) and each value of k, the notebook computes and stores:
 
-Fractional amplitude widths (DW_10, DW_25, DW_33, DW_50, DW_66, DW_75)
+- Mean and standard deviation of MAE  
+- Mean and standard deviation of RMSE  
+- Mean and standard deviation of MAPE  
+- Best-performing configurations
 
-Systolic–Diastolic timing ratios
+Final summaries are exported to:
 
-Cycle period (CP)
-
-Features are aggregated across a window (e.g., 30 seconds) using:
-
-mean
-
-variance
-
-This produces a rich, physiologically meaningful feature vector per PPG window.
-
-3. Machine Learning Pipeline
-Feature Pruning
-
-Features with correlation > 0.95 are removed.
-
-Models Trained
-
-ElasticNet Regression
-
-Gradient Boosting Regressor (GBM)
-
-Random Forest Regressor
-
-LightGBM Regressor
-
-Dummy Mean Predictor (baseline)
-
-Cross-Validation
-
-Uses leave-k-subjects-out:
-
-k ∈ {1, 2, 3}
-
-
-This mimics realistic generalization to unseen subjects — a key requirement in physiological ML.
-
-4. ML Results (EVAL Dataset)
-
-Metrics computed for each model:
-
-MAE (Mean Absolute Error)
-
-RMSE
-
-MAPE
-
-Standard deviations across folds
-
-Best-performing models for SBP and DBP are included in:
-
+```
 results/YYYY-MM-DD_best_results_eval.csv
+```
 
-5. Clinical Validation (Kolkata ABPM Dataset)
+---
 
-Implemented in KolkataStatsTests.ipynb
+## 5. Clinical Validation (Kolkata ABPM Dataset)
 
-This notebook performs clinical-grade validation using ABPM (Ambulatory Blood Pressure Monitoring) reference measurements.
+Implemented in `KolkataStatsTests.ipynb`, this component provides a detailed clinical evaluation using a real ABPM dataset.
 
-Includes:
-Bland–Altman Analysis
+### Bland–Altman Analysis
+- Per-subject and overall agreement plots  
+- Mean bias, limits of agreement, and outlier counts  
+- Exported as PNGs for each subject  
 
-For each subject and overall dataset:
+### Dipping Analysis
+- Identification of nighttime dipping interval  
+- Linear regression of BP decay (reference and predicted)  
+- Comparison of dipping slopes  
+- Summary tables of dipping strength  
 
-Mean difference
-
-Limits of agreement
-
-Outlier count
-
-Visualization saved as PNGs
-
-Dipping Analysis
-
-Evaluates nighttime dipping by computing:
-
-Slope of BP during dipping window
-
-Predicted vs. reference slope comparison
-
-Start/end times of dipping
-
-of points in dipping domain
-Error Distribution Analysis
-
+### Error Distribution and Normality
 For each subject:
+- Mean error  
+- Mean absolute error  
+- RMSE  
+- Mean absolute percentage error  
+- Percent of data within 1/2/3 standard deviations  
 
-Mean error (bias)
+### Demographic Correlation
+Using a subject metadata file, the notebook examines trends across:
+- Age  
+- Gender  
+- Medical group  
+- HbA1C levels  
+- Chronic conditions  
+- Medication regimens  
 
-MAE
+This section connects ML error patterns to clinically relevant subgroups.
 
-RMSE
+---
 
-MAPE
+## 6. Data Sources
 
-% data within 1/2/3 standard deviations
+### AIME 2020 EVAL Dataset
+Processed 30-second PPG windows (normalized, back-filled).
+Citation:  
+Morassi Sasso, Ariane (2020). Processed EVAL Dataset. https://doi.org/10.6084/m9.figshare.12649691
 
-Outlier spread plots
+### Kolkata ABPM Dataset
+Real ambulatory BP monitoring dataset from a multisubject study used for clinical validation.
 
-Demographic Correlation
+---
 
-Links error patterns to:
+## 7. Reproducing the Pipeline
 
-Age
-
-Gender
-
-Medical group
-
-HbA1C
-
-Comorbidities
-
-Medications
-
-Subject-Level Profiles
-
-Identifies:
-
-Best and worst performing subjects
-
-Clinical characteristics of these groups
-
-This section transforms the ML results into clinically interpretable insights, essential for real-world adoption.
-
-6. Data Sources
-AIME 2020 EVAL Dataset
-
-Processed 30-second PPG windows (min–max normalized, backfilled).
-Citation:
-Morassi Sasso, Ariane (2020). Processed EVAL Dataset.
-https://doi.org/10.6084/m9.figshare.12649691
-
-Kolkata ABPM Dataset
-
-Multisubject ambulatory BP study used for downstream clinical evaluation.
-
-7. Reproducing the Pipeline
-Extract Features
+### Extract Features
+```python
 path = extract_features(
     csv=True,
     time_delta='30 seconds',
@@ -234,64 +176,51 @@ path = extract_features(
     special_filter='norm',
     verbose=False
 )
+```
 
-Train & Evaluate Models
+### Train Models
+```python
 df = pd.read_csv(path)
 results = predict_bp_from_ppg(df, predicted_variable='SBP', k=2)
+```
 
-Run Clinical Validation
-# Generate Bland–Altman plots
+### Clinical Validation
+```python
 generateBlandAltmanGraphs(1, 30)
-
-# Compute dipping statistics
 generateDippingGraphStats(False)
-
-# Subject-level error stats
 generateMeanStats('by subject', False)
+```
 
-8. Key Strengths of This Project
+---
 
-Combines signal processing, machine learning, and clinical statistics
+## 8. Strengths of This Project
 
-Produces interpretable, physiologically meaningful features
+- Combines signal processing, ML, and clinical validation in one pipeline  
+- Produces interpretable, physiologically grounded features  
+- Uses subject-based cross-validation for more realistic evaluation  
+- Includes complete clinical-grade analysis (Bland–Altman, dipping, circadian trends)  
+- Demonstrates a multi-disciplinary understanding of biosignals, modeling, and statistics  
 
-Uses subject-wise validation — far more realistic than random splits
+---
 
-Includes clinical-grade evaluation, uncommon in student ML projects
+## 9. Validation Report
 
-End-to-end pipeline demonstrates real-world product thinking
+A full summary of best-performing models, error characteristics, and clinical agreement is provided in `Validation Report.pdf`.
 
-9. Validation Report Included
+---
 
-The Validation Report.pdf summarizes:
+## 10. Future Work
 
-Best model performance
+- Incorporating second-derivative PPG features  
+- Adding neural time-series models (TCN, Transformer)  
+- Applying motion artifact filtering  
+- Personalized BP models  
+- Testing on additional datasets (e.g., MIMIC-III waveform database)
 
-Error ranges for SBP and DBP
+---
 
-Clinical agreement (LOA)
+## Contributors
 
-Interpretation of results
+**Sriram Bhimaraju**  
+Signal Processing, Machine Learning, and Clinical Analytics
 
-Dipping and circadian behavior analysis
-
-10. Future Work
-
-Possible extensions:
-
-Add waveform decomposition (WBP, second derivative PPG)
-
-Try neural models (TCN, mini-Transformer)
-
-Add motion artifact filtering
-
-Evaluate model personalization approaches
-
-Test on MIMIC-III waveform database
-
-Contributors
-
-Sriram Bhimaraju
-Signal Processing · Machine Learning · Clinical Analytics
-
-Feel free to reach out for collaboration!
